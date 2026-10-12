@@ -3,13 +3,13 @@
 import logging
 import time
 
-from .devices.coin_acceptor import CoinAcceptor, EventTracker
+from .devices.coin_acceptor import CoinAcceptor, CoinAcceptorInfo, EventTracker
 from .host import CCTalkHost
 from .serial import SerialTransport
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.3"
 
-PORT = "COM11"
+PORT = "COM3"
 BAUDRATE = 9600
 
 HOST_ADDRESS = 1
@@ -23,6 +23,38 @@ def configure_logging() -> None:
         level=logging.INFO,
         format="%(message)s",
     )
+
+def log_device_info(log: logging.Logger, info: CoinAcceptorInfo) -> None:
+    """Print the collected device info in a stable, UI format"""
+
+    log.info("")
+    log.info("Coin Acceptor Information")
+    log.info("-" * 40)
+    log.info("Equipement     : %s", info.equipement or "Unknown / not supported")
+    log.info("Serial number  : %s", info.serial_number if info.serial_number is not None else "Unknown")
+    log.info("Manufacturer   : %s", info.manufacturer or "Unknown / not supported")
+    log.info("Product code   : %s", info.product_code or "Unknown / not supported")
+    log.info("Soft Version   : %s", info.soft_version or "Unknown / not supported")
+    log.info("CcTalk version : %s", info.comms_revision or "Unknown / not supported")
+    log.info("Creation date  : %s", info.creation_date or "Unknown / not supported")
+    log.info("Build code     : %s", info.build_code or "Unknown / not supported")
+    log.info("")
+    log.info("Coin Channels")
+    log.info("%-8s %-24s %s", "Channel", "Coin ID", "Enabled")
+    log.info("-" * 55)
+
+    for channel in info.coin_channels:
+        coin_id = channel.coin_id or channel.error or "No data"
+        enabled = (
+            "Yes" if channel.enabled is True else
+            "No" if channel.enabled is False else
+            "Unknown"
+        )
+        log.info("%-8s %-24s %s", channel.channel, coin_id, enabled)
+        if channel.response_hex and channel.coin_id is None:
+            log.info("         Raw response: %s", channel.response_hex)
+
+    log.info("-" * 55)
 
 def main() -> None:
     configure_logging()
@@ -94,6 +126,13 @@ def main() -> None:
                     "(serial: %s)",
                     serial_number,
                 )
+
+                log.info("Reading coin acceptor information...")
+                try:
+                    device_info = coin_acceptor.get_device_info()
+                    log_device_info(log, device_info)
+                except Exception:
+                    log.exception("Could not read complete coin acceptor information")
                 log.info("Host started.")
                 log.info("Insert a coin.")
                 log.info("Press Ctrl+C to exit.")
@@ -120,7 +159,6 @@ def main() -> None:
                     )
 
             time.sleep(POLL_INTERVAL)
-
     except KeyboardInterrupt:
         log.info("Stopping...")
 
